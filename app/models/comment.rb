@@ -45,7 +45,7 @@ class Comment < ApplicationRecord
   scope :above_average, -> {
     joins(:story)
       .joins("left outer join comment_stats on date(comments.created_at) = comment_stats.date")
-      .where("comments.score > coalesce(comment_stats.`average`, 3)")
+      .where("comments.score > coalesce(comment_stats.average, 3)")
   }
   scope :on_stories_not_authored_by, ->(user) {
     joins(:story)
@@ -394,7 +394,7 @@ class Comment < ApplicationRecord
         score = (select coalesce(sum(vote), 0) from votes where comment_id = comments.id),
         flags = (select count(*) from votes where comment_id = comments.id and vote = -1),
         confidence = #{new_confidence},
-        confidence_order = concat(lpad(char(65535 - floor(#{new_confidence} * 65535) using binary), 2, '\0'), char(id & 0xff using binary))
+        confidence_order = decode(lpad(to_hex(65535 - floor(#{new_confidence} * 65535)::int), 4, '0') || lpad(to_hex((id & 255)::int), 2, '0'), 'hex')
       WHERE id = #{id.to_i}
     SQL
     story.update_cached_columns
@@ -636,7 +636,7 @@ class Comment < ApplicationRecord
           with recursive discussion as (
           select
             c.id,
-            cast(confidence_order as char(#{Comment::COP_LENGTH}) character set binary) as confidence_order_path
+            left(encode(confidence_order, 'hex'), #{Comment::COP_LENGTH}) as confidence_order_path
             from comments c
             where
               thread_id in (#{thread_ids.join(", ")}) and
@@ -644,11 +644,12 @@ class Comment < ApplicationRecord
           union all
           select
             c.id,
-            cast(concat(
-              left(discussion.confidence_order_path, 3 * (depth + 1)),
-              c.confidence_order
-            ) as char(#{Comment::COP_LENGTH}) character set binary)
-          from comments c join discussion on c.parent_comment_id = discussion.id
+            left(
+              left(discussion.confidence_order_path, 3 * (depth + 1))
+              ||
+              encode(c.confidence_order, 'hex'),
+              #{Comment::COP_LENGTH}
+            )          from comments c join discussion on c.parent_comment_id = discussion.id
           )
           select * from discussion as comments
         ) as comments_recursive on comments.id = comments_recursive.id
@@ -670,7 +671,7 @@ class Comment < ApplicationRecord
           with recursive discussion as (
           select
             c.id,
-            cast(confidence_order as char(#{Comment::COP_LENGTH}) character set binary) as confidence_order_path
+            left(encode(confidence_order, 'hex'), #{Comment::COP_LENGTH}) as confidence_order_path
             from comments c
             join stories on stories.id = c.story_id
             where
@@ -679,10 +680,12 @@ class Comment < ApplicationRecord
           union all
           select
             c.id,
-            cast(concat(
-              left(discussion.confidence_order_path, 3 * (depth + 1)),
-              c.confidence_order
-            ) as char(#{Comment::COP_LENGTH}) character set binary)
+            left(
+              left(discussion.confidence_order_path, 3 * (depth + 1))
+              ||
+              encode(c.confidence_order, 'hex'),
+              #{Comment::COP_LENGTH}
+            )
           from comments c join discussion on c.parent_comment_id = discussion.id
           )
           select * from discussion as comments

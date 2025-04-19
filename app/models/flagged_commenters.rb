@@ -58,19 +58,27 @@ class FlaggedCommenters
       rank = 0
       User.active.joins(:comments)
         .where("comments.created_at >= ?", period)
-        .group("comments.user_id")
+        .group("users.username, users.id, comments.user_id")
         .select("
           users.id, users.username,
           (sum(flags) - #{avg_sum_flags})/#{stddev_sum_flags} as sigma,
-          count(distinct if(flags > 0, comments.id, null)) as n_comments,
-          count(distinct if(flags > 0, story_id, null)) as n_stories,
+          count(distinct comments.id) filter (where flags > 0) as n_comments,
+          count(distinct story_id) filter (where flags > 0) as n_stories,
           sum(flags) as n_flags,
           sum(flags)/count(distinct comments.id) as average_flags,
           (
-            count(distinct if(flags > 0, comments.id, null)) /
+            count(distinct comments.id) filter (where flags > 0) /
             count(distinct comments.id)
           ) * 100 as percent_flagged")
-        .having("n_comments > 4 and n_stories > 1 and n_flags >= 10 and percent_flagged > 10")
+        .having("
+            count(distinct story_id) filter (where flags > 0) > 4
+            and count(distinct story_id) filter (where flags > 0) > 1
+            and sum(flags) >= 10
+            and  (
+              count(distinct comments.id) filter (where flags > 0) /
+              count(distinct comments.id)
+            ) * 100 > 10
+        ")
         .order(sigma: :desc)
         .limit(30)
         .each_with_object({}) { |u, hash|

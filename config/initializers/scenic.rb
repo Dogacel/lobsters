@@ -2,7 +2,7 @@
 
 scenic_multidb_adapter = Class.new do
   def initialize
-    @mysql = Scenic::Adapters::MySQL.new
+    @postgres = Scenic::Adapters::Postgres.new
     @sqlite = Scenic::Adapters::Sqlite.new
   end
 
@@ -18,8 +18,8 @@ scenic_multidb_adapter = Class.new do
 
   def adapter
     case ActiveRecord::Base.connection
-    when ActiveRecord::ConnectionAdapters::TrilogyAdapter
-      @mysql
+    when ActiveRecord::ConnectionAdapters::PostgreSQLAdapter
+      @postgres
     when ActiveRecord::ConnectionAdapters::SQLite3Adapter
       @sqlite
     else

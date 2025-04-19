@@ -1,9 +1,9 @@
 ---
-trilogy: &trilogy
-  adapter: trilogy
-  encoding: utf8mb4
+postgresql: &postgresql
+  adapter: postgresql
+  encoding: unicode 
   host: 127.0.0.1
-  port: 3306
+  port: 15432
   pool: 5
 
 sqlite3: &sqlite3
@@ -12,9 +12,9 @@ sqlite3: &sqlite3
 
 development:
   primary:
-    <<: *trilogy
+    <<: *postgresql
     database: lobsters_dev
-    username: root
+    username: postgres
     password: localdev
   cache:
     <<: *sqlite3
@@ -26,14 +26,14 @@ development:
     migrations_paths: db/queue_migrate
 
 test:
-  <<: *trilogy
+  <<: *postgresql
   database: lobsters_test
-  username: root
+  username: postgres
   password: localdev
 
 production:
   primary:
-    <<: *trilogy
+    <<: *postgresql
     database: lobsters
   cache:
     <<: *sqlite3

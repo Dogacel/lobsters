@@ -50,7 +50,7 @@ class StoryRepository
 
   def top(length)
     top = Story.base(@user).where("created_at >= (NOW() - INTERVAL " \
-      "#{length[:dur]} #{length[:intv].upcase})")
+      "'#{length[:dur]} #{length[:intv].upcase})'")
     top.order(score: :desc)
   end
 end

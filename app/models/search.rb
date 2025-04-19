@@ -152,7 +152,7 @@ class Search
         value = flatten_title value
         query.where!(
           story: Story.joins(:story_text).where(
-            "MATCH(story_texts.title) AGAINST ('+#{value}' in boolean mode)"
+            "story_texts.title ILIKE ?", "%#{value}%"
           )
         )
       when :url
@@ -176,11 +176,12 @@ class Search
       end
     end
     if terms.any?
-      terms_sql = <<~SQL.tr("\n", " ")
-        MATCH(comment)
-        AGAINST ('#{terms.map { |s| "+#{s}" }.join(" ")}' in boolean mode)
-      SQL
-      query.where! terms_sql
+      ts_query = terms.map { |t| "#{t}:*" }.join(" & ")
+
+      query.where!(
+        "to_tsvector('english', comment) @@ websearch_to_tsquery('english', ?)",
+        ts_query
+      )
     end
     if tags
       query.where!(
@@ -260,7 +261,8 @@ class Search
         title = true
         value = flatten_title value
         query.joins!(:story_text).where!(
-          "MATCH(story_texts.title) AGAINST ('+#{value}' in boolean mode)"
+          "to_tsvector('english', story_texts.title) @@ websearch_to_tsquery('english', ?)",
+          "+#{value}"
         )
       when :url
         url = true
@@ -281,11 +283,21 @@ class Search
       end
     end
     if terms.any?
-      terms_sql = <<~SQL.tr("\n", " ")
-        MATCH(story_texts.title, story_texts.description, story_texts.body)
-        AGAINST ('#{terms.map { |s| "+#{s}" }.join(" ")}' in boolean mode)
+      terms_query = terms.map { |s| "+#{s}" }.join(" ")
+
+      ts_vector = <<~SQL.squish
+        to_tsvector(
+          'english',
+          coalesce(story_texts.title, '')       || ' ' ||
+          coalesce(story_texts.description, '') || ' ' ||
+          coalesce(story_texts.body, '')
+        )
       SQL
-      query.joins!(:story_text).where! terms_sql
+
+      query.joins!(:story_text).where!(
+        "#{ts_vector} @@ websearch_to_tsquery('english', ?)",
+        terms_query
+      )
     end
     if tags
       # This searches tags by subquery because otherwise Rails recognizes the join against tags and
